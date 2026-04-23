@@ -1,0 +1,20 @@
+# Child repos — each has its own git remote; do not commit
+fillando-be/
+fillando-fe/
+
+# Claude Code per-user local settings
+.claude/
+
+# Environment files — never commit secrets
+/.env
+/.env.local
+/.env.*.local
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo

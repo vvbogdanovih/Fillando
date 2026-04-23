@@ -108,7 +108,6 @@ yarn start:dev              # dev server (hot reload)
 yarn build                  # build
 yarn lint                   # ESLint
 yarn test                   # unit tests
-docker compose up -d        # MongoDB
 
 # Frontend
 cd fillando-fe

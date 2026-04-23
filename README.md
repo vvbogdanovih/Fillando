@@ -33,12 +33,9 @@ cp docs/runbooks/env-template.env .env
 # 4. Sync env to child repos
 bash scripts/sync-env.sh
 
-# 5. Start MongoDB
-cd fillando-be && docker compose up -d && cd ..
-
-# 6. Start backend
+# 5. Start backend
 cd fillando-be && yarn install && yarn start:dev
 
-# 7. Start frontend (in another terminal)
+# 6. Start frontend (in another terminal)
 cd fillando-fe && yarn install && yarn dev
 ```

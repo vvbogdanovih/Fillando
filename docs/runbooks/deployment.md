@@ -15,8 +15,8 @@
   │  Port forwarding:                                        │
   │    :80  ──► LXC nginx-router :80      (HTTP)             │
   │    :443 ──► LXC nginx-router :443     (HTTPS)            │
-  │    :2222 ─► Backend VM :22            (SSH для CI/CD)    │
-  │    :2223 ─► Frontend VM :22           (SSH для CI/CD)    │
+  │    :9991 ─► Backend VM :22            (SSH для CI/CD)    │
+  │    :9990 ─► Frontend VM :22           (SSH для CI/CD)    │
   └──────────────────────┬───────────────────────────────────┘
                          │ LAN
   ┌──────────────────────▼───────────────────────────────────┐
@@ -268,8 +268,8 @@ systemctl reload nginx
 |----------------|----------|--------------|-----------------|------|
 | 80 | TCP | 192.168.1.200 | 80 | HTTP → LXC router |
 | 443 | TCP | 192.168.1.200 | 443 | HTTPS → LXC router |
-| 2222 | TCP | 192.168.1.101 | 22 | SSH → Backend VM |
-| 2223 | TCP | 192.168.1.102 | 22 | SSH → Frontend VM |
+| 9991 | TCP | 192.168.1.101 | 22 | SSH → Backend VM |
+| 9990 | TCP | 192.168.1.102 | 22 | SSH → Frontend VM |
 
 Після збереження перевірити з **зовнішньої мережі** (мобільний інтернет, або сервіс типу `portchecker.co`):
 
@@ -877,10 +877,10 @@ chmod 600 ~/.ssh/authorized_keys
 
 ```bash
 # Backend VM (через port forwarding роутера)
-ssh -p 2222 -i ~/.ssh/fillando_be_deploy deploy@<ваш-статичний-IP>
+ssh -p 9991 -i ~/.ssh/fillando_be_deploy deploy@<ваш-статичний-IP>
 
 # Frontend VM
-ssh -p 2223 -i ~/.ssh/fillando_fe_deploy deploy@<ваш-статичний-IP>
+ssh -p 9990 -i ~/.ssh/fillando_fe_deploy deploy@<ваш-статичний-IP>
 ```
 
 Обидва мають підключитися без запиту пароля.
@@ -894,7 +894,7 @@ ssh -p 2223 -i ~/.ssh/fillando_fe_deploy deploy@<ваш-статичний-IP>
 | `SSH_HOST` | Ваш статичний IP | `91.123.45.67` |
 | `SSH_USER` | `deploy` | `deploy` |
 | `SSH_KEY` | Вміст `~/.ssh/fillando_be_deploy` (ПРИВАТНИЙ ключ!) | Починається з `-----BEGIN OPENSSH PRIVATE KEY-----` |
-| `SSH_PORT` | `2222` | `2222` |
+| `SSH_PORT` | `9991` | `9991` |
 
 Скопіювати приватний ключ:
 
@@ -910,7 +910,7 @@ cat ~/.ssh/fillando_be_deploy | pbcopy
 | `SSH_HOST` | Той самий статичний IP |
 | `SSH_USER` | `deploy` |
 | `SSH_KEY` | Вміст `~/.ssh/fillando_fe_deploy` (приватний ключ) |
-| `SSH_PORT` | `2223` |
+| `SSH_PORT` | `9990` |
 
 ### 5.5 Backend workflow
 
@@ -1035,7 +1035,7 @@ secure: ENV.NODE_ENV === 'production'
 
 **Мережа:**
 - [ ] DNS A-записи вказують на статичний IP (`dig fillando.com`)
-- [ ] Port forwarding працює (80, 443 → LXC router; 2222 → BE; 2223 → FE)
+- [ ] Port forwarding працює (80, 443 → LXC router; 9991 → BE; 9990 → FE)
 - [ ] LXC router бачить обидві VM по LAN
 
 **SSL:**
@@ -1140,7 +1140,7 @@ curl http://192.168.1.102:80   # Frontend VM
 
 ```bash
 # Перевірити port forwarding з локальної машини:
-ssh -p 2222 -i ~/.ssh/fillando_be_deploy deploy@<статичний-IP>
+ssh -p 9991 -i ~/.ssh/fillando_be_deploy deploy@<статичний-IP>
 
 # Якщо timeout — порт не прокинутий на роутері
 # Якщо connection refused — sshd не працює на VM або firewall блокує

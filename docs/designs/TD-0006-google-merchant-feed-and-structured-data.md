@@ -1,11 +1,11 @@
 # TD-0006 — Google Merchant Center: продуктовий фід та збагачені structured data
 
-- **Status:** Draft
+- **Status:** Approved (2026-09-06)
 - **Author:** vvbogdanovih
-- **Reviewers:** —
-- **Date:** 2026-09-01
+- **Reviewers:** рецензія 2026-09-06 — [TD-0006-review.md](TD-0006-review.md): блокер Б1, М1–М3, S1–S5 внесені в текст; чотири питання §8 закриті власником
+- **Date:** 2026-09-01 (аудит коду); переглянуто 2026-09-06 проти `dev` обох репо
 - **Components:** both (fillando-be, fillando-fe)
-- **Related:** [Plan-0002 roadmap, Фаза 5](../plans/plan-0002-catalog-seo-roadmap.md) · [TD-0002](TD-0002-catalog-taxonomy-and-landings.md) · [TD-0005](TD-0005-catalog-category-isolation.md) · [FRD §4.3, §5, §18.5, §18.6](../requirements/FRD.md)
+- **Related:** [Plan-0006](../plans/plan-0006-google-merchant.md) (реалізація) · [Plan-0005 §4, блок E](../plans/plan-0005-catalog-target-state.md) · [Plan-0002 roadmap, Фаза 5](../plans/plan-0002-catalog-seo-roadmap.md) · [TD-0002](TD-0002-catalog-taxonomy-and-landings.md) · [TD-0005](TD-0005-catalog-category-isolation.md) · [FRD §4.3, §5, §18.3, §18.5, §18.6](../requirements/FRD.md)
 
 ## 1. Summary
 
@@ -66,9 +66,11 @@ XML-фіда; мінімальний, обґрунтований набір но
 
 ### 3.1 Що вже є (аудит 2026-09-01)
 
-Product JSON-LD, єдина точка генерації — `fillando-fe/src/app/(root)/products/[slug]/ProductPage.tsx:142-158`:
+Product JSON-LD, єдина точка генерації — `fillando-fe/src/app/(root)/products/[slug]/ProductPage.tsx:201-219`
+(на 2026-09-06; у першій редакції TD стояло `:142-158`):
 
 ```js
+image: images,                                  // сирі S3-URL, не деривативи
 brand: { '@type': 'Brand', name: SITE_NAME },   // завжди "Fillando"
 offers: {
   price: variant.price, priceCurrency: 'UAH',
@@ -102,8 +104,23 @@ stock_updated_at, status (DRAFT|ACTIVE|ARCHIVED)`.
 `mpn`, `condition`, явне поле `currency` (увесь каталог мовчки припускає
 UAH), `diameter` як реальне поле.
 
-`Vendor`: лише `name` (unique) + `slug` (unique) — саме це джерело для
-`brand`.
+`Vendor`: лише `name` (unique) + `slug` (unique). **Це постачальник, не
+виробник** (рецензія, Б1): на деві в колекції рівно два документи —
+«Filando» (сам магазин) і «NicePrice» (постачальник із мертвої інтеграції,
+через яку існує `vendor_product_sku`). Бренд лежить в атрибуті товару
+«Виробник» і на деві заповнений на всіх 301 варіанті (Kingroon 181,
+Bambu Lab 77, Sunlu 43). Читається наявним хелпером
+`pickAttr(attributes, MANUFACTURER_PATTERNS)`
+(`product-attribute.helpers.ts:11`), який уже в проді живить колонку бренду
+прайс-листа (`price-list/price-list.service.ts:130`) і поле `manufacturer`
+прайс-шита (`product.service.ts:185`). **Саме це — джерело `brand`**, не
+`Vendor.name`. Чи `Vendor` задуманий як постачальник назавжди — питання до
+власника (§8), на дизайн не впливає.
+
+Після Plan-0004 (у `dev` з 2026-09-04) варіант має також `color_id` /
+`color_family`, а товар — `spooled_product_id`; колекції `colors` і
+`landings` існують. На висновки цього TD це впливає лише в §5.3
+(`g:color`, `g:product_type` підключаються одразу, не «пізніше»).
 
 `Category`: `name, slug, required_attributes[], image, order` — жодного
 поля під Google-таксономію.
@@ -125,8 +142,17 @@ admin-gated SSE, `@nestjs/schedule` cron з `RUN_CRON` і overlap-guard) — ц�
 корисний **структурний** приклад для нового модуля фіда, не пряме
 перевикористання (напрямок даних протилежний).
 
-`GET /products/variants/slugs` (джерело sitemap) не фільтрує по `status` —
-підтверджений баг (`findAllSlugs()` в `product-variant.repository.ts`).
+`GET /products/variants/slugs` (джерело sitemap) на момент аудиту не
+фільтрував по `status`; виправлено в `dev` разом із `countAll()` (коміт
+`0f46afd`, Plan-0003), тож у цього TD роботи тут немає.
+
+`findVariantWithProduct` шукає `{ slug, status: ACTIVE }`
+(`product-variant.repository.ts:232`) — DRAFT **і ARCHIVED** віддають 404
+на всіх трьох поверхах (репозиторій → `NotFoundException` → `notFound()`).
+Це свідома зміна Plan-0003 (той самий коміт), закріплена інтеграційним
+тестом і задокументована в `DATA_MODELS.md`, `API_AND_SWAGGER.md`,
+`RBAC.md`, `CATALOG_RELEASE.md`. §5.4 частково її відкочує — це названо
+там явно.
 
 ### 3.3 Категорійна ізоляція (TD-0005)
 
@@ -141,8 +167,14 @@ admin-gated SSE, `@nestjs/schedule` cron з `RUN_CRON` і overlap-guard) — ц�
 **Функціональні**
 
 - Публічний XML-фід, що містить тільки `status: ACTIVE` варіанти, з
-  коректним `availability` (in stock / out of stock), правильним `brand`,
+  коректним `availability` (`in_stock` / `out_of_stock`), правильним
+  `brand` (виробник з атрибута, не назва магазину й не постачальник),
   `item_group_id` (групування варіантів одного товару).
+- Фід доступний за публічним URL після кожного рестарту без ручного кроку;
+  до першої генерації відповідає `503`, ніколи — порожнім каналом.
+- Адмін може проставити й виправити `weight_g` варіанта і
+  `google_product_category` категорії через форми адмінки (макет, екран 12),
+  не лише через API.
 - Фід і Product JSON-LD використовують ту саму логіку `availability`/
   `condition`/`weight` — Google не повинен бачити розбіжність між фідом і
   сторінкою (типова причина відхилення в Merchant).
@@ -172,18 +204,19 @@ graph TD
     subgraph fillando-be
         pv[(ProductVariant<br/>+weight_g)]
         cat[(Category<br/>+google_product_category)]
-        vnd[(Vendor)]
-        feed[FeedService<br/>+FeedCronService]
+        feed[FeedService<br/>+FeedCronService<br/>генерація на bootstrap + щогодини]
         api["GET /feeds/google-shopping.xml<br/>POST /feeds/google-shopping/regenerate<br/>GET /feeds/google-shopping/status"]
-        bslug["GET /products/by-slug/:slug<br/>+ vendor_name, weight_g"]
+        bslug["GET /products/by-slug/:slug<br/>+ manufacturer, weight_g<br/>ACTIVE і ARCHIVED"]
     end
     subgraph fillando-fe
-        pdp[ProductPage.tsx<br/>Product JSON-LD]
+        adm[Адмінка<br/>weight_g у формі варіанта<br/>google_product_category у формі категорії]
+        pdp[ProductPage.tsx<br/>Product JSON-LD + режим «Знято з продажу»]
         ga4[GA4 events<br/>view_item/add_to_cart/<br/>begin_checkout/purchase]
     end
+    adm --> pv
+    adm --> cat
     pv --> feed
     cat --> feed
-    vnd --> feed
     feed --> api
     api -->|"scheduled fetch"| gmc[(Google Merchant Center)]
     bslug --> pdp
@@ -196,8 +229,20 @@ graph TD
 
 | Поле | Де | Тип | Обґрунтування |
 |---|---|---|---|
-| `weight_g` | `ProductVariant` | `number \| null`, default `null` | Варіант — це sku, що фізично відвантажується; вага двох розмірів котушки одного товару різна, тому не на `Product`. Грами, не кг — уникає float-помилок і робить одиницю частиною імені поля. Живить: JSON-LD `weight`, обчислювану доставку (замість фіксованих ₴97), `g:shipping_weight` у фіді, майбутні ваго-залежні тарифи Merchant shipping settings. |
-| `google_product_category` | `Category` (embedded, `_id:false`) | `{ id: number, path: string } \| null` | Per-category, за контрактом TD-0005 — нова категорія отримує власне значення тим самим `PATCH /categories/:id`, без спільної таблиці. `id` — канонічний (стабільний при перейменуваннях таксономії Google), `path` — для адміна. `null` не блокує фід — рядок просто йде без цього поля, з попередженням у звіті. |
+| `weight_g` | `ProductVariant` | `number \| null`, default `null` | Варіант — це sku, що фізично відвантажується; вага двох розмірів котушки одного товару різна, тому не на `Product`. Грами, не кг — уникає float-помилок і робить одиницю частиною імені поля. Живить: JSON-LD `weight`, обчислювану доставку (замість фіксованих ₴97), `g:shipping_weight` у фіді, ваго-залежні тарифи Merchant shipping settings. **Поверхня адмінки:** поле «Вага, г» у картці варіанта (макет, екран 12). Без нього бекфіл лишився б єдиним способом коли-небудь записати вагу — ні виправити після бекфілу, ні проставити новому товару (рецензія, S4). |
+| `google_product_category` | `Category` (embedded, `_id:false`) | `{ id: number, path: string } \| null` | Per-category, за контрактом TD-0005 — нова категорія отримує власне значення без спільної таблиці. `id` — канонічний (стабільний при перейменуваннях таксономії Google), `path` — лише для адміна: українського файла таксономії Google не публікує (`uk-UA` віддає 404, перевірено 2026-09-06). `null` не блокує фід — рядок просто йде без цього поля, з попередженням у звіті. **Поверхня адмінки:** секція «SEO та Google Merchant» у формі категорії (екран 12) — для однієї категорії вистачило б `PATCH`, але екран є в макеті, а макет — визначення готовности. |
+
+**Значення для «Філамент» — рішення власника 2026-09-06:**
+`{ id: 499682, path: "Electronics > Print, Copy, Scan & Fax > 3D Printer Accessories" }`.
+В опублікованій таксономії (`taxonomy-with-ids.en-US.txt`, 5596 рядків, звірено
+2026-09-06) слово `Filament` не зустрічається; до 3D-друку стосуються два вузли —
+`499682` (аксесуари, листок) і `6865` (самі принтери). Деталізацію добирає
+`g:product_type`.
+
+⚠️ **Артборд «Нові поля у формах» показує `ID = 2496` і шлях
+`Hardware > Tools > Milling & Cutting Machines > 3D Printer Filament`.** У реальній
+таксономії `2496 = Business & Industrial > Medical`, а такого шляху не існує.
+З макета значення не копіювати; артборд виправляється окремо (Plan-0005 §6).
 
 **Свідомо НЕ додається:**
 
@@ -246,9 +291,10 @@ feed.types.ts                   — FeedRow, FeedGenerationSummary, ExclusionRea
 
 Нова репозиторна вибірка, поруч із наявним `findPriceListRows`
 (`product-variant.repository.ts`): `findActiveForFeed()` — `$match
-{status: ACTIVE}` → `$lookup products/categories/vendors` (усі —
+{status: ACTIVE}` → `$lookup products/categories/colors` (усі —
 `preserveNullAndEmptyArrays`, захист від висячого посилання) → проєкція
-потрібних полів. Без нового індексу — це не гарячий шлях (щогодинний job,
+потрібних полів. `vendors` не приєднуються: бренд — атрибут товару (§3.2),
+а `Vendor` фіду не потрібен. Без нового індексу — це не гарячий шлях (щогодинний job,
 не catalog browse), TD-0002's "без нових $lookup на гарячому шляху"
 стосується саме каталогу, не цього.
 
@@ -256,16 +302,45 @@ feed.types.ts                   — FeedRow, FeedGenerationSummary, ExclusionRea
 
 | Метод | Шлях | Доступ |
 |---|---|---|
-| `GET` | `/feeds/google-shopping.xml` | публічний, як `sitemap.xml`/`robots.txt` — фід не чутливі дані, Merchant/Bing/Meta всі очікують просто фетчабельний URL |
+| `GET` | `/feeds/google-shopping.xml` | публічний, як `sitemap.xml`/`robots.txt` — фід не чутливі дані, Merchant/Bing/Meta всі очікують просто фетчабельний URL. До першої генерації після старту процесу — `503` + `Retry-After: 60`, ніколи не порожній `<channel>` (Key flow нижче) |
 | `POST` | `/feeds/google-shopping/regenerate` | ADMIN — синхронний (не SSE, як у Prom: агрегація кількох тисяч рядків не потребує progress stream), повертає `FeedGenerationSummary` |
 | `GET` | `/feeds/google-shopping/status` | ADMIN — останній summary без перегенерації |
 
-**Кеш і розклад**: один інстанс деплою (підтверджено — один `api`-контейнер
-без реплік), тому in-memory кеш у `FeedService` (`cachedXml`, `lastSummary`,
-`generatedAt`) — без окремої DB-колекції під кеш. `FeedCronService`
-перевикористовує наявний `RUN_CRON` (його ж докстрінг уже узагальнює: "e.g.
-Prom sync" — не заводимо другий подібний прапорець), щогодини,
-overlap-guard як у `PromSyncService`.
+**Кеш і розклад**: один інстанс `api` без реплік — так є сьогодні і так
+планується на Railway (Plan-0005 §4, блок A), тому in-memory кеш у
+`FeedService` (`cachedXml`, `lastSummary`, `generatedAt`) — без окремої
+DB-колекції під кеш. `FeedCronService` перевикористовує наявний `RUN_CRON`
+(його ж докстрінг уже узагальнює: "e.g. Prom sync" — не заводимо другий
+подібний прапорець), щогодини, overlap-guard як у `PromSyncService`.
+Якщо колись з'являться репліки — кеш переїжджає в один Mongo-документ,
+зміна ізольована всередині `FeedService`.
+
+**Key flow: Merchant fetch** (рецензія, S5.1 — на Railway рестарти є нормою,
+тому холодний старт — не крайовий випадок, а щоденний):
+
+```mermaid
+sequenceDiagram
+    participant R as Railway (рестарт)
+    participant F as FeedService
+    participant G as Google Merchant
+    R->>F: onApplicationBootstrap → generate() у фоні, не блокує старт
+    G->>F: GET /feeds/google-shopping.xml (кеш порожній)
+    F-->>G: 503, Retry-After: 60
+    Note over G: fetch failed → повтор за розкладом; позиції НЕ знімаються
+    F->>F: generate() завершився → cachedXml, lastSummary
+    G->>F: GET /feeds/google-shopping.xml
+    F-->>G: 200, application/xml, Last-Modified = generatedAt
+    loop щогодини (RUN_CRON)
+        F->>F: generate(); при помилці лишається попередній XML + лог
+    end
+```
+
+Чому `503`, а не порожній канал: порожній валідний фід Merchant трактує як
+«усі позиції зникли» і знімає їх; невдалий фетч — як тимчасову помилку, і
+позиції живуть ще 30 днів від останнього успішного фетчу. Генерація на
+bootstrap стискає вікно `503` до кількох секунд; `POST /regenerate` лишається
+ручним запасним варіантом. Невдала регенерація ніколи не затирає останній
+вдалий XML.
 
 **Мапінг полів:**
 
@@ -276,16 +351,16 @@ overlap-guard як у `PromSyncService`.
 | `title` | `ProductVariant.name` | вже `"{product.name} — {v_value}"`. **Анти-вимога:** білдер не додає жодних суфіксів на кшталт «(рефіл)» — назва товару вже містить «Refill (без котушки)» (TD-0002 §5.2.1), тож суфікс дав би дубль |
 | `description` | `Product.description.html`, HTML→текст, обрізано до 5000 символів | fallback на `title`, якщо відсутнє — не виключення, а попередження у звіті |
 | `link` | `{FRONTEND_URL}/products/{variant.slug}` | збігається з фактичним `canonical` сторінки товару |
-| `g:image_link` / `g:additional_image_link` | `images[0]` / `images[1..10]`, `-1280.webp` derivative | ця тіра гарантовано існує для кожного завантаженого зображення |
+| `g:image_link` / `g:additional_image_link` | `images[0]` / `images[1..10]`, **оригінальний URL як збережений** — той самий, що віддає Product JSON-LD (`image: images`) | Не деривативи (рецензія, М2): бекфіл `generate-image-derivatives.js` не прогнаний (`MODE = 'dry-run'`), `NEXT_PUBLIC_USE_IMAGE_DERIVATIVES='false'` у проді, а відсутній дериватив — жорсткий 404. Оригінал існує для кожного зображення за визначенням і знімає розбіжність «фід ↔ сторінка». Перехід на `-1280.webp` — окремим кроком після чистого VERIFY-прогону бекфілу, одночасно у фіді та в JSON-LD |
 | `g:availability` | `status` + `stock` | таблиця нижче |
 | `g:price` | `"{price.toFixed(2)} UAH"` | без `sale_price` — `price` уже фінальна ціна; `prom_base_price` внутрішня бухгалтерія, ніколи не показана покупцю — видавати її як "було" зі спотворило б реальність |
-| `g:brand` | `Vendor.name` | |
+| `g:brand` | `pickAttr(product.attributes, MANUFACTURER_PATTERNS)` — атрибут «Виробник» | Required для товару без GTIN; `Vendor` — постачальник (§3.2), брати його — та сама помилка, що нинішній «Fillando», лише з іншим рядком. Атрибут відсутній → **виключення** з причиною `missing_brand` (на деві 0 таких); фолбеку на назву магазину немає свідомо |
 | `g:google_product_category` | `Category.google_product_category.id` | пропускається (не виключення), якщо не встановлено — репортиться |
-| `g:product_type` | `Category.name`, апгрейдиться до `"{Category.name} > {Landing.h1}"`, коли товар матчить закріплені фільтри лендінга | working baseline сьогодні — просто `Category.name`; `product-type.resolver.ts` викликається з `landings: []`, тому апгрейд не потребує редеплою фіда, коли TD-0002 додасть колекцію `landings` — досить підключити один lookup. **Товар може матчити кілька лендінгів** (PETG Refill → і `/filament/petg`, і `/filament/refill`): обирається найбільш специфічний — найбільше збігів у `filters`, за рівності менший `order` (правило зафіксоване в TD-0002 §5.2.3) |
+| `g:product_type` | `"{Category.name} > {Landing.h1}"`, коли товар матчить закріплені фільтри опублікованого лендінга; інакше `Category.name` | Колекція `landings` уже в `dev` (Plan-0004), тож `product-type.resolver.ts` підключається одразу. **Товар може матчити кілька лендінгів** (PETG Refill → і `/filament/petg`, і `/filament/refill`): обирається найбільш специфічний — найбільше збігів у `filters`, за рівності менший `order` (правило зафіксоване в TD-0002 §5.2.3) |
 | `g:condition` | константа `'new'` | |
 | `g:identifier_exists` | константа `false` | доки немає gtin/mpn |
-| `g:color` | наявний бекендовий хелпер `pickColor()` (вже в проді для прайс-листа) сьогодні; апгрейд на `Color.name_en`, коли TD-0002 додасть `color_id` | перевикористання наявного, а не новий хелпер |
-| `g:material` | наявний `pickAttr(MATERIAL_PATTERNS)` сьогодні; апгрейд на `polymer`-атрибут із TD-0002 (семантично точніший за складену маркетингову назву) | те саме — перевикористання, не новий код |
+| `g:color` | `Color.name_uk` через `color_id` (у `dev` після Plan-0004); фолбек — наявний `pickColor()` для варіантів, які словник не покрив (на деві 2 з 301) | Українська, бо мова фіда — `uk`, і це та сама назва, що бачить покупець на сторінці; розбіжність «фід ↔ сторінка» тут така ж небажана, як у зображеннях |
+| `g:material` | атрибут `k === 'polymer'` (TD-0002), фолбек — наявний `pickAttr(MATERIAL_PATTERNS)`, доки міграція таксономії не прогнана на проді | перевикористання, не новий код; після релізу фолбек стає мертвою гілкою — прибрати разом із `material` у `required_attributes` |
 | `g:shipping_weight` | `"{weight_g/1000} kg"` | пропускається, якщо `weight_g` відсутнє. Для рефілів (TD-0002 §5.2.1) вага реально менша на вагу котушки (~200–250 г) — саме `weight_g`, а не таксономія, моделює фізику посилки |
 | `g:custom_label_0..4` | див. нижче | |
 
@@ -294,13 +369,18 @@ overlap-guard як у `PromSyncService`.
 | `status` | `stock` | Результат |
 |---|---|---|
 | `DRAFT` / `ARCHIVED` | будь-який | **виключено з фіда повністю** |
-| `ACTIVE` | `> 0` | `in stock` |
-| `ACTIVE` | `<= 0` | `out of stock` (лишається у фіді — так само, як вітрина сьогодні тримає такі товари видимими, просто відсортованими останніми) |
+| `ACTIVE` | `> 0` | `in_stock` |
+| `ACTIVE` | `<= 0` | `out_of_stock` (лишається у фіді — так само, як вітрина сьогодні тримає такі товари видимими, просто відсортованими останніми) |
+
+Значення — з підкресленням, як у чинному довіднику атрибута (`in_stock`,
+`out_of_stock`, `preorder`, `backorder`); форма через пробіл у довіднику не
+згадується, а `availability` — Required, тобто невалідне значення знімає
+позицію, не попереджає (рецензія, S2).
 
 `preorder`/`backorder` — свідомий non-goal: немає жодних даних (дата
 відновлення стоку абощо), що обґрунтовували б ці статуси; вигадування
 ризикує прапорцем невідповідності політиці Google, гірше, ніж консервативний
-`out of stock`.
+`out_of_stock`.
 
 **Custom labels** (усе з наявних даних, нічого нового не рахується, крім
 label 4):
@@ -308,18 +388,31 @@ label 4):
 | Label | Значення |
 |---|---|
 | `custom_label_0` | `Category.name` |
-| `custom_label_1` | `Vendor.name` |
-| `custom_label_2` | Маржа з `prom_base_price` vs `price`: `high` (≥20%) / `medium` (10–20%) / `low` (<10%) / `unknown` |
+| `custom_label_1` | виробник — той самий `pickAttr(MANUFACTURER_PATTERNS)`, що й `g:brand` |
+| `custom_label_2` | Глибина залишку: `deep` (`stock` > 10) / `low` (1–10) / `out` (0) |
 | `custom_label_3` | Ціновий діапазон: `budget` (<500) / `mid` (500–1500) / `premium` (>1500) |
 | `custom_label_4` | Швидкість продажів (bestseller/popular/standard) за 90 днів `PAID`-замовлень — **fast-follow, не блокер запуску** (потребує нового `OrderRepository`-агрегату) |
 
-⚠️ **`custom_label_2` (маржа) буде видимий будь-кому, хто відкриє публічний
-URL фіда** — грубо забакетовано (high/medium/low, не точні цифри), але це
-свідомий компроміс, не побічний ефект. Винесено окремим відкритим питанням
-у §8 — власник має свідомо погодитись, а не дізнатись постфактум.
+**Маржі у фіді немає — рішення власника 2026-09-06** (питання 1 §8, дефолт
+рецензії). Дві причини, і кожної вистачило б окремо:
+
+- `API_AND_SWAGGER.md:200-202` забороняє публікувати будь-що, з чого виводиться
+  маржа (`prom_base_price`, `prom_discount_ratio`, …); правило запінене тестами
+  (`SUPPLIER_FIELDS`) і зроблене як security-фікс Plan-0003. Публічний фід із
+  бакетом маржі був би винятком із власного правила.
+- Формула в першій редакції рахувала не маржу: `prom_base_price` — додисконтна
+  ціна постачальника, наша ціна = `(base − discount) + фіксована націнка в ₴`
+  (`prom-pricing.ts`), тож на акційних товарах виходило від'ємне число, яке
+  мовчки падало в `low`; а за правильної формули націнка 30–120 ₴ на котушку
+  400–800 ₴ дає 5–9% для всього каталогу — label не сегментував би нічого
+  (рецензія, М3).
+
+Глибина залишку рахується з `stock`, який уже є в рядку, і реально ділить
+каталог на кампанії «є що продавати» / «добиваємо» / «тільки ремаркетинг».
 
 **Виключення й звіт**: виключаються `status ≠ ACTIVE`, нуль зображень,
-відсутня/`≤0` ціна, висяче посилання на product/category/vendor.
+відсутня/`≤0` ціна, відсутній атрибут «Виробник» (`missing_brand`), висяче
+посилання на product/category.
 **Не** виключається `stock=0` (це `availability`, не виключення — інакше
 губиться історія показів товару щоразу, як він закінчується). Звіт —
 не JSON-файл на диск (це разова міграційна практика TD-0002, тут же —
@@ -330,10 +423,11 @@ URL фіда** — грубо забакетовано (high/medium/low, не т
 категорії) — саме тут `required_attributes` отримує видимість без
 enforcement на запис.
 
-**Жорсткої залежності від TD-0002 (Фаза 1) немає.** Фід запускається на
-поточній схемі. `color`/`material`/`product_type` покращуються автоматично
-або через одну малу зміну (`product-type.resolver.ts`), коли TD-0002
-дасть `color_id`/`landings` — без редизайну модуля.
+**Залежність від TD-0002 знята самим часом:** `color_id`, `polymer` і
+`landings` уже в `dev` (Plan-0004), тож фід пишеться одразу під нову схему.
+Фолбеки (`pickColor`, `MATERIAL_PATTERNS`) лишаються тільки на період між
+деплоєм коду й прогоном міграцій на проді — обидва відбуваються в одному
+релізі (Plan-0005, блок A), тому це вікно вимірюється хвилинами.
 
 ### 5.4 Product JSON-LD (frontend)
 
@@ -344,23 +438,44 @@ enforcement на запис.
 
 **Виправлення:**
 
-- **`brand`** → `product.vendor_name` (нове поле на відповіді
-  `GET /products/by-slug/:slug`, той самий патерн lookup'у, що вже
-  використовується для `category_name`/`category_slug` у
-  `findVariantWithProduct`), з фолбеком на `SITE_NAME`, якщо `null`.
+- **`brand`** → `product.manufacturer` — нове поле на відповіді
+  `GET /products/by-slug/:slug`, обчислене тим самим
+  `pickAttr(attributes, MANUFACTURER_PATTERNS)`, що й `g:brand` у фіді
+  (§5.3), — одна функція на обох поверхнях, тож розійтися вони не можуть.
+  **Без фолбеку на `SITE_NAME`**: коли атрибута немає, `brand` у розмітці
+  просто відсутній (schema.org його не вимагає) — назва магазину на місці
+  бренду і є нинішня помилка. Те саме поле живить чип «Виробник» над H1
+  (макет, екран 3).
 - **`availability` + доступність сторінки** — статус тепер справді читається:
-  - **DRAFT** → трактується як неіснуючий товар: `generateMetadata` віддає
-    `robots: {index:false, follow:false}`, сторінка викликає `notFound()`
-    — той самий патерн, що вже є для невідомого slug.
-  - **ARCHIVED** → **не** 404. Живий беклінк чи ще не призупинена
-    Shopping/PMax реклама можуть вести саме сюди — 404 зламав би посадкову
-    сторінку діючої кампанії. Натомість: сторінка лишається 200,
-    `availability: https://schema.org/Discontinued` (валідне значення
-    schema.org саме під цей випадок), кнопка "у кошик" вимкнена,
-    `robots: {index:false, follow:true}`. Це узгоджується з виключенням
-    архівних товарів із фіда (§5.3): фід ніколи не порекомендує архівний
-    товар як активний, а сторінка, якщо на неї все ж прийшли, чесно каже
-    "знято з продажу" замість вдавати, що товар доступний.
+  - **DRAFT** → як і сьогодні: `notFound()`, `robots: {index:false, follow:false}`
+    — чинна поведінка, писати нічого.
+  - **ARCHIVED → 200 + `https://schema.org/Discontinued`** — рішення власника
+    2026-09-06 (питання 4 §8). Живий беклінк чи ще не призупинена Shopping/PMax
+    реклама можуть вести саме сюди — 404 зламав би посадкову сторінку кампанії,
+    і цієї втрати не видно в жодному звіті, доки не подивишся в Ads.
+    `ARCHIVED` тут означає «більше не возимо», і schema.org має значення саме
+    під цей випадок. Сторінка (макет, екран 5): сірий пілл «Знято з продажу»,
+    знебарвлене фото, перекреслена ціна, неактивна кнопка «У кошик», без
+    перемикача варіантів на архівний, `robots: {index:false, follow:true}`,
+    посилання на категорію/лендінг як вихід. Фід архівні виключає за будь-якої
+    відповіді (§5.3), тож суперечності немає.
+
+    **Це передбачає бекенд-крок, і він іде першим** (рецензія, S3): сьогодні
+    `findVariantWithProduct` шукає `{ slug, status: ACTIVE }`, тому фронтенд
+    архівного варіанта не побачить ніколи. Зміна — пустити `ACTIVE + ARCHIVED`
+    в одному `$match`, DRAFT лишити невидимим; `siblings` і
+    `spooled_counterpart` лишаються `ACTIVE`-only. Оновити інтеграційний тест
+    (`it.each(['draft-slug','archived-slug'])` → лише `draft-slug`) і чотири
+    доки, що фіксують заборону (`DATA_MODELS.md:321-323`, `API_AND_SWAGGER.md`,
+    `RBAC.md`, `CATALOG_RELEASE.md:74`). Поле `status` уже в
+    `PUBLIC_VARIANT_FIELDS` і у фронтовому типі.
+
+    **Що при цьому не відкочується, щоб це було сказано вголос:** коміт
+    `0f46afd` (Plan-0003) змішав приховування статусів і приховування
+    supplier-полів. Відкат стосується тільки першого. `vendor_product_sku`,
+    `prom_id`, `prom_*` лишаються прихованими, `SUPPLIER_FIELDS`-тести не
+    чіпаються. Кошик і так відмовляє архівному варіанту (`cart.service.ts:82`,
+    409), тож жодного шляху купити знятий товар не з'являється.
   - **ACTIVE + stock≤0** → `OutOfStock` (як і сьогодні). **ACTIVE + stock>0**
     → `InStock`.
 - **`sku`** — `variant.sku`, тривіально, дані вже є.
@@ -372,10 +487,15 @@ enforcement на запис.
 - **`offers.priceValidUntil`** — рухоме вікно (`+90` днів від дати
   генерації), а не фіксована дата — безпечно під будь-яким кешуванням
   сторінки.
-- **`productGroupID`** — `product.id`, тільки коли `siblings.length > 1`
+- **`inProductGroupWithID`** — `product.id`, тільки коли `siblings.length > 1`
   (той самий поріг, що вже вирішує показ перемикача варіантів у UI) —
-  простіший, документований Google-ом механізм замість повної вкладеної
-  `ProductGroup`/`isVariantOf`.
+  простіший, документований Google-ом механізм для «один URL на варіант»
+  замість повної вкладеної `ProductGroup`/`hasVariant`. Значення збігається з
+  `g:item_group_id` у фіді. **Саме `inProductGroupWithID`, не
+  `productGroupID`** (рецензія, М1): у schema.org `productGroupID` має в
+  домені лише тип `ProductGroup`; на вузлі `Product` він ігнорується мовчки —
+  без помилки в Rich Results Test, без рядка в логах, просто група не
+  збирається.
 - **`color`/`material`/`weight`** — деградують за конструкцією, не через
   спеціальний прапорець: `color` тільки коли є резолвлений об'єкт кольору з
   бекенду (не відтворюємо на фронтенді color-эвристику, яку TD-0002 якраз
@@ -384,12 +504,34 @@ enforcement на запис.
   коли `weight_g != null`. Жодна умова не специфічна для філаменту — код
   для майбутньої категорії без цих концепцій просто ніколи їх не покаже,
   без помилки чи заглушки (пряме виконання контракту TD-0005).
-- **`shippingDetails`** — обчислюється з `weight_g` через невелику таблицю
-  вагових діапазонів (ставки — **плейсхолдери**, потребують звірки з
-  реальними тарифами Нової Пошти перед продом, див. §8), а не фіксовані
-  ₴97. Немає інтеграції з тарифним API перевізника — і не варто її зараз
-  будувати (YAGNI): проста таблиця відповідає тому ж рівню точності, що й
-  наявна константа, просто чутлива до ваги.
+- **`shippingDetails`** — обчислюється з `weight_g` через таблицю ставок
+  **дві сходинки × дві зони** (рішення власника 2026-09-06, питання 2 §8):
+  «до 2 кг» / «до 10 кг» × «по місту» / «по Україні». Це форма публічного
+  тарифу «Стандарт» відділення–відділення Нової Пошти: сходинки, не
+  кілограми, і зона як друга вісь. Шість ваг-плейсхолдерів першої редакції
+  прибрано.
+
+  **Числа знімаються разовим скриптом із NP API**, не вгадуються: бекенд уже
+  має ключ і клієнт (`nova-post-sync.service.ts:186-192`), метод
+  `InternetDocument.getDocumentPrice` для 2 ваг × 2 напрямків дає ставки за
+  реальним договором магазину — ~20 рядків, без нових залежностей. Результат
+  скрипта — один JSON, який іде **в три місця з одного джерела** (рецензія,
+  S5.3): константа `SHIPPING_RATE_TABLE` у фронтенді (JSON-LD і блок доставки
+  на сторінці товару), account-level shipping у Merchant Center (§9), і в
+  `MERCHANT_FEED.md` як запис «звідки числа й коли знімати наново». Хто кого
+  оновлює: скрипт → таблиця → адмін переносить у Merchant руками; редагувати
+  константу вручну не можна.
+
+  Що виражається і що ні: JSON-LD і сторінка товару користуються зоною «по
+  Україні» (`shippingDestination: UA`) — конфігурація покупця на сторінці
+  товару невідома, а Merchant так само працює на рівні країни. Зона «по
+  місту» лишається в таблиці, бо скрипт її дістає задарма, і знадобиться
+  чекауту, коли той знатиме місто — це поза цим TD. Збір за оголошену вартість
+  залежить від суми чека, не від ваги, і вагова таблиця його не виражає в
+  принципі — на сторінці товару це «орієнтовно», і так підписано (макет,
+  екран 3). Товар без `weight_g` → `shippingDetails` відсутній, не «₴97 за
+  замовчуванням». Тарифного API в рантаймі немає (YAGNI): таблиця оновлюється
+  скриптом, коли змінюється договір.
 - **`hasMerchantReturnPolicy`** — додається `itemDefectReturnFees:
   https://schema.org/FreeReturn` (schema.org-поле саме під випадок
   дефектного товару з `/returns` §5, де пересилку оплачує продавець, на
@@ -437,11 +579,21 @@ enforcement на запис.
 value-based bidding у PMax; товарна деталізація — можливий наступний крок,
 не зараз.
 
-**Супутнє виправлення**: `docker-compose.prod.yml` не прокидає
-`NEXT_PUBLIC_GOOGLE_ADS_ID`/`NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_CONVERSION`
-(оголошені в `Dockerfile.prod`, відсутні в `args:` docker-compose) —
-виправляється в тому ж PR, що додає `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID` і
-`NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` (§5.6) тими самими build-args.
+**Build-args**: `NEXT_PUBLIC_GOOGLE_ADS_ID` і
+`NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_CONVERSION` уже прокинуті в
+`docker-compose.prod.yml:17-18` (перша редакція TD стверджувала зворотне —
+рецензія, S1). Лишається додати два нові — `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID` і
+`NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` (§5.6) — в `Dockerfile.prod` і
+`docker-compose.prod.yml` тим самим патерном. На Railway (Plan-0005, блок A)
+це ж відображається як змінні сервісу; переписується разом із рунбуками.
+
+**Подвійний облік конверсій** (рецензія, S5.2): Ads-піксель лишається
+**єдиним** джерелом конверсії `purchase` для ставок. GA4-подію `purchase`
+**не імпортувати в Ads як конверсію** — інакше кожне замовлення рахується
+двічі і Smart Bidding оптимізує під удвічі завищену цінність. Зв'язок GA4↔Ads
+потрібен для аудиторій і допоміжних сигналів (`add_to_cart`,
+`begin_checkout`), а не для другої `purchase`-конверсії. Це записується в
+`MERCHANT_FEED.md` і в крок 15 §9, бо помилка робиться в кабінеті, не в коді.
 
 ### 5.6 Search Console verification + sitemap
 
@@ -449,9 +601,9 @@ value-based bidding у PMax; товарна деталізація — можл�
   — Next.js не рендерить тег, якщо значення `undefined`, тож це безпечно
   мерджиться зараз і активується, коли власник пройде верифікацію в Search
   Console.
-- `sitemap.ts`: додати `/contacts`, `/offer`, `/returns`, `/privacy`,
-  `/price-sheet` (уже узгоджено з Plan-0002 Фазою 0, просто виконується
-  тут заразом, бо той самий файл).
+- `sitemap.ts`: `/contacts`, `/offer`, `/returns`, `/privacy`, `/price-sheet`
+  **уже в `staticRoutes`** (`sitemap.ts:62-69`, Plan-0004 PR-3) — роботи немає;
+  перша редакція TD планувала їх додати.
 
 ## 6. Alternatives considered
 
@@ -474,6 +626,21 @@ Bing/Meta без переробки.
 замість цього видимість через звіт фіда (§5.3), enforcement — окреме
 рішення, якщо звіт покаже, що проблема реальна й велика.
 
+**Фолбек `brand` на назву магазину, коли атрибут «Виробник» відсутній.**
+Відкинуто: це і є нинішня помилка, з якої TD починається; для товару без
+GTIN бренд, що не збігається з реальним виробником, — типова підстава
+item-level disapproval. Порожнє поле чесніше: у JSON-LD `brand` просто немає,
+у фіді позиція виключається з іменованою причиною і потрапляє у звіт.
+
+**Персистити XML фіда в Mongo замість in-memory кешу.** Відкинуто зараз:
+генерація на bootstrap стискає вікно холодного старту до секунд, а другого
+інстанса немає. Якщо репліки з'являться — це один документ і зміна в межах
+`FeedService`.
+
+**Бакет маржі в `custom_label_2`.** Відкинуто власником (§8, питання 1): і
+порушує записане правило магазину про supplier-поля, і математично не
+сегментує (§5.3). Замінено на глибину залишку.
+
 **Реалізувати color/material-евристику на фронтенді як тимчасовий міст до
 TD-0002.** Відкинуто: відтворило б ту саму крихкість (регекс за
 регістром/синонімами), яку TD-0002 якраз усуває на бекенді. Бекендовий фід
@@ -483,60 +650,83 @@ TD-0002.** Відкинуто: відтворило б ту саму крихк�
 ## 7. Cross-cutting concerns
 
 - **Security & privacy**: фід — публічний URL без чутливих персональних
-  даних (тільки каталог), як `sitemap.xml`. Єдиний нюанс — `custom_label_2`
-  (маржа), див. §8.
+  даних (тільки каталог), як `sitemap.xml`. Жодне supplier-поле
+  (`prom_*`, `vendor_product_sku`) і жодна похідна від них у фід не
+  потрапляє — правило `API_AND_SWAGGER.md` діє і тут. Розкриття ARCHIVED у
+  `by-slug` не розширює набір публічних полів: `PUBLIC_VARIANT_FIELDS` не
+  змінюється.
 - **Performance & scale**: фід будується окремим, нечастим (щогодинним)
   job, не додає жодного навантаження на гарячий шлях каталогу
   (`findCatalogItems`). In-memory кеш — GET-запит фіда ніколи не тригерить
-  повну агрегацію.
+  агрегацію; до першої генерації після старту — `503`, не блокуючий виклик.
+  `findVariantWithProduct` з `ACTIVE + ARCHIVED` — той самий індекс по
+  `slug`, без нового.
 - **Migration/compatibility**: `weight_g` — нове nullable-поле, без
   міграції-блокера (бекфіл окремо, § Rollout). `google_product_category`
   — нове nullable-embedded поле. Жодних змін до наявних обов'язкових полів.
+  Один свідомий відкат поведінки — ARCHIVED-варіант знову читається через
+  `by-slug` (§5.4), із оновленням тесту й чотирьох доків.
 - **Observability**: `FeedGenerationSummary` (виключення + попередження)
   логується щозапуску і доступний адміну через `GET /status`.
 - **Testing strategy**: unit — `google-shopping-feed.builder.ts` (мапінг
-  availability, xmlEscape, custom labels), `product-jsonld.utils.ts`
-  (усі гілки graceful degradation). Integration — `findActiveForFeed`
-  виключає DRAFT/ARCHIVED. e2e — фід валідний XML, товар з `weight_g=null`
-  не ламає жоден рядок, ARCHIVED-сторінка віддає 200 з `Discontinued`, DRAFT
-  — 404.
+  availability з підкресленням, xmlEscape, custom labels, `missing_brand`),
+  `product-jsonld.utils.ts` (усі гілки graceful degradation, у т.ч. `brand`
+  відсутній, `inProductGroupWithID` лише при `siblings.length > 1`,
+  `Discontinued` для ARCHIVED). Integration — `findActiveForFeed` виключає
+  DRAFT/ARCHIVED і не тягне supplier-полів; `findVariantWithProduct` віддає
+  ARCHIVED і **не** віддає DRAFT. e2e — фід валідний XML, товар з
+  `weight_g=null` не ламає жоден рядок, `GET` до першої генерації → 503 з
+  `Retry-After`, ARCHIVED-сторінка віддає 200 з `Discontinued` і без кнопки
+  купівлі, DRAFT — 404.
 
 ## 8. Open questions
 
-1. **`custom_label_2` (маржа) публічно видимий у фіді** — грубо
-   забакетовано (high/medium/low), але технічно доступний будь-кому, хто
-   відкриє URL. Власник має явно погодитись або попросити прибрати/
-   замінити цей label на щось інше (напр. лише категорія+бренд, без маржі).
-2. **Вагові діапазони для обчислюваної доставки** (§5.4) — тільки якір
-   ~1.3кг/₴97 реальний, решта — плейсхолдери. Потрібна звірка з актуальними
-   тарифами Нової Пошти перед продом.
-3. **Точний `google_product_category` (id + path) для категорії
-   "Філамент"** — це вибір із опублікованої таксономії Google, не технічне
-   рішення; власник підбирає значення при рол-ауті.
-4. **Обробка ARCHIVED-товару** — узгоджено 200+Discontinued замість 404,
-   щоб не зламати діючу рекламу. Якщо процес власника — завжди
-   призупиняти кампанію одразу з архівацією SKU, простіший плоский 404
-   (як DRAFT) теж прийнятний — сказати, якщо так зручніше.
+Чотири питання першої редакції **закриті власником 2026-09-06** — у кожному
+прийнято дефолт, рекомендований рецензією:
+
+| # | Питання | Рішення | Де в тексті |
+|---|---|---|---|
+| 1 | `custom_label_2` — бакет маржі публічно у фіді? | **Ні.** Замінено на глибину залишку (`deep`/`low`/`out`); правило про supplier-поля лишається без винятків | §5.3 |
+| 2 | Вагові діапазони доставки | **Дві сходинки × дві зони**, числа знімаються скриптом із NP API за реальним договором; одна таблиця для JSON-LD, сторінки й Merchant | §5.4 |
+| 3 | `google_product_category` для «Філамент» | **`499682` — Electronics > Print, Copy, Scan & Fax > 3D Printer Accessories.** Значення `2496` на артборді — помилка макета | §5.2 |
+| 4 | Архівний товар | **200 + `Discontinued`**, з попереднім бекенд-кроком і без відкату security-частини Plan-0003 | §5.4 |
+
+Лишається одне, і воно **не блокує** ні план, ні реалізацію:
+
+1. **Чи `Vendor` — постачальник назавжди**, чи колись мав стати виробником?
+   Дизайн бере бренд з атрибута в обох випадках. Якщо колись рішення буде
+   «Vendor = виробник», це окрема міграція даних (двом документам зараз
+   немає що мігрувати) і окремий TD, бо зачепить адмінку виробників (FRD §12).
 
 ## 9. Rollout
 
+Переписано 2026-09-06 після рецензії: кроки на вже зроблене прибрано (S1),
+бекенд-крок для ARCHIVED доданий (S3), адмін-UI для нових полів доданий (S4),
+`vendor_name` і зміна кошика прибрані (Б1, S5.4). Розбиття на PR-и і статуси —
+у [Plan-0006](../plans/plan-0006-google-merchant.md).
+
 | # | Репо | Що |
 |---|---|---|
-| 1 | be | `ProductVariant.weight_g`, `Category.google_product_category` + DTOs, `yarn spec:export` |
-| 2 | be | Ride-along фікс: `findAllSlugs()` фільтр по `status: ACTIVE` |
-| 3 | be | `vendor_name` + `weight_g` у відповіді `by-slug` (lookup, за патерном `category_name`) і в `CartService.populateItems` |
-| 4 | be | Бекфіл `backfill-variant-weight.js` (dry-run → звіт → apply) — паралельно, не блокер |
-| 5 | be | Модуль `feed/` повністю: схема → репозиторій → білдер → контролер → крон; реєстрація в `app.module.ts` |
-| 6 | be | Одноразовий `PATCH /categories/:id` — власник встановлює `google_product_category` для "Філамент" (адмін-UI не потрібен для однієї категорії) |
-| 7 | fe | Batch 1 (без залежності від беку): `sku`, `itemCondition`, `offers.url`/`priceValidUntil`, `productGroupID`, оновлений `hasMerchantReturnPolicy`, DRAFT/ARCHIVED guard, sitemap-доповнення, verification-хук, повна GA4-обвʼязка (property + 4 події), фікс `docker-compose.prod.yml`/`Dockerfile.prod` |
-| 8 | fe | Batch 2 (після кроку 3): фікс `brand`, обчислювана доставка з `weight_g` |
-| 9 | fe | Batch 3 (написано зараз, активується само собою після TD-0002): `color`/`material` |
-| 10 | be | Fast-follow: `custom_label_4` (`OrderRepository`-агрегат продажів за 90 днів) |
-| 11 | owner | Search Console: верифікація сайту, значення в `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` |
-| 12 | owner | Merchant Center: акаунт, верифікація домену, реєстрація URL фіда, розклад фетчу ≥ щогодини, налаштування shipping/return-policy на рівні акаунта |
-| 13 | owner | Google Ads ↔ Merchant Center лінк; GA4-property, `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID`; GA4 ↔ Ads лінк; запуск Performance Max кампанії |
-| 14 | be | `src/docs/MERCHANT_FEED.md` (за патерном `PROM_AVAILABILITY_SYNC.md`) |
-| 15 | both | Оновити FRD (§4.3, §5, §18.5/§18.6) після реалізації |
+| 1 | be | `ProductVariant.weight_g`, `Category.google_product_category` + DTOs (create/update варіанта й категорії), `yarn spec:export` |
+| 2 | be | `findVariantWithProduct`: `status ∈ {ACTIVE, ARCHIVED}`, DRAFT лишається невидимим; `siblings`/`spooled_counterpart` без змін. Оновити int-тест і `DATA_MODELS.md`, `API_AND_SWAGGER.md`, `RBAC.md`, `CATALOG_RELEASE.md`. Supplier-поля не чіпати |
+| 3 | be | `manufacturer` (через `pickAttr(MANUFACTURER_PATTERNS)`) + `weight_g` у відповіді `by-slug`. Кошик не змінюється — §5 не проєктує для нього ваги |
+| 4 | be | Бекфіл `backfill-variant-weight.js` (dry-run → звіт → apply) — паралельно, не блокер; після нього вага правиться в адмінці (крок 9) |
+| 5 | be | Модуль `feed/` повністю: репозиторна вибірка → білдер → контролер → крон → генерація на bootstrap і `503` до неї; реєстрація в `app.module.ts` |
+| 6 | be | Скрипт `scripts/shipping-rates.js`: `InternetDocument.getDocumentPrice` для 2 ваг × 2 зон → JSON таблиці ставок; результат — у константу фронтенду (крок 8) і в Merchant (крок 14) |
+| 7 | fe | Batch 1 (без залежності від беку): `sku`, `itemCondition`, `offers.url`/`priceValidUntil`, `inProductGroupWithID`, оновлений `hasMerchantReturnPolicy`, verification-хук, GA4-обв'язка (property + 4 події), два нові build-args у `Dockerfile.prod`/`docker-compose.prod.yml`; винесення `buildProductJsonLd` |
+| 8 | fe | Batch 2 (після кроків 2, 3, 6): `brand` з `manufacturer` + чип «Виробник» над H1; режим сторінки «Знято з продажу» (екран 5); доставка з `weight_g` за таблицею ставок + блок доставки на сторінці товару (екран 3) |
+| 9 | fe | Адмінка (екран 12): поле «Вага, г» у картці варіанта; секція «SEO та Google Merchant» у формі категорії (`id` + `path`, підказка з правильним значенням `499682`) |
+| 10 | fe | Batch 3: `color` з `variant.color.name_uk`, `material` з атрибута `polymer` у JSON-LD — дані вже в `by-slug` після Plan-0004 |
+| 11 | owner | Через адмінку (крок 9) встановити `google_product_category = 499682` для «Філамент» — не з артборда |
+| 12 | be | Fast-follow: `custom_label_4` (`OrderRepository`-агрегат продажів за 90 днів) |
+| 13 | owner | Search Console: верифікація сайту, значення в `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` |
+| 14 | owner | Merchant Center: акаунт, верифікація домену, реєстрація URL фіда, розклад фетчу ≥ щогодини, shipping на рівні акаунта **з таблиці кроку 6**, return-policy |
+| 15 | owner | Google Ads ↔ Merchant Center лінк; GA4-property, `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID`; GA4 ↔ Ads лінк **без імпорту GA4 `purchase` як конверсії** (§5.5); запуск Performance Max |
+| 16 | be | `src/docs/MERCHANT_FEED.md` (за патерном `PROM_AVAILABILITY_SYNC.md`): формат, виключення, холодний старт, звідки числа доставки, застереження про подвійний облік |
+| 17 | both | Оновити FRD (§4.3, §5, §10 і §11 — нові поля форм, §18.3, §18.5, §18.6) після реалізації |
 
-Кроки 11–13 — операційні дії власника в дашбордах Google, поза кодом; усе
-інше — implementation plan, який пишеться окремо, після рев'ю цього TD.
+Кроки 11, 13–15 — операційні дії власника в кабінетах Google, поза кодом.
+Порядок «код → реліз → міграції → кабінети» лишається: фід не реєструється в
+Merchant, доки `dev → prod` не задеплоєно і міграції Plan-0004 не прогнані
+(Plan-0005, блок A) — інакше перший фетч Google побачить каталог до
+стандартизації кольорів і без лендінгів у `product_type`.

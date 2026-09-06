@@ -18,6 +18,6 @@ how a TD differs from a plan.
 | [TD-0002](TD-0002-catalog-taxonomy-and-landings.md) | Catalog taxonomy, colour standardisation and SEO landings | Approved |
 | [TD-0003](TD-0003-order-cancellation-payment-status.md) | Payment status for cancelled orders (`VOIDED`) | Implemented |
 | [TD-0004](TD-0004-cash-on-delivery.md) | Накладний платіж (cash on delivery) | Implemented |
-| [TD-0005](TD-0005-catalog-category-isolation.md) | Ізоляція каталогу по категоріях | Draft — але Plan-0004 уже спирається на нього як на контракт; потребує рецензії |
-| [TD-0006](TD-0006-google-merchant-feed-and-structured-data.md) | Google Merchant Center: фід та structured data | Draft — блокує Фазу 5; спершу 4 питання §8, потім рецензія, потім план |
+| [TD-0005](TD-0005-catalog-category-isolation.md) | Ізоляція каталогу по категоріях | Approved (2026-09-06) — рецензія [TD-0005-review.md](TD-0005-review.md) |
+| [TD-0006](TD-0006-google-merchant-feed-and-structured-data.md) | Google Merchant Center: фід та structured data | Approved (2026-09-06) — рецензія [TD-0006-review.md](TD-0006-review.md); реалізація — [Plan-0006](../plans/plan-0006-google-merchant.md) |
 | [TD-0007](TD-0007-dealer-api.md) | Дилерське (B2B) API: товар за артикулом | Draft |

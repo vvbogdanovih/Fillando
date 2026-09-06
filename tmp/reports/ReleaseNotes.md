@@ -1,3 +1,13 @@
+## 06/09
+- Made saved landing copy appear on the storefront at once.
+- Proved the cache purge against a production build.
+- Reviewed TD-0006 and prepared its four decisions.
+- Found the feed would have shipped the wrong brand.
+- Corrected the Google category on the mock.
+- Approved TD-0006 and TD-0005 after review.
+- Wrote Plan-0006 for the Merchant work.
+- Queued production cache revalidation as backend work.
+
 ## 05/09
 - Built the colour dictionary as a table.
 - Showed how many variants each colour uses.

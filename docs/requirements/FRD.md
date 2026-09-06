@@ -20,7 +20,7 @@
 8. [Замовлення — клієнт](#8-замовлення--клієнт)
 9. [Адмін-панель — Замовлення](#9-адмін-панель--замовлення)
 10. [Адмін-панель — Товари](#10-адмін-панель--товари)
-11. [Адмін-панель — Категорії](#11-адмін-панель--категорії)
+11. [Адмін-панель — Каталог (категорії, кольори, лендінги)](#11-адмін-панель--каталог-категорії-кольори-лендінги)
 12. [Адмін-панель — Виробники (Vendors)](#12-адмін-панель--виробники-vendors)
 13. [Адмін-панель — Знижкові купони](#13-адмін-панель--знижкові-купони)
 14. [Адмін-панель — Реквізити оплати](#14-адмін-панель--реквізити-оплати)
@@ -32,6 +32,8 @@
 20. [Нереалізований функціонал (заглушки)](#20-нереалізований-функціонал-заглушки)
 21. [Оптові заявки (Wholesale Inquiries)](#21-оптові-заявки-wholesale-inquiries)
 22. [Сторінка FAQ](#22-сторінка-faq)
+23. [Інформаційні та юридичні сторінки](#23-інформаційні-та-юридичні-сторінки)
+24. [Google Merchant: фід і structured data](#24-google-merchant-фід-і-structured-data)
 
 ---
 
@@ -308,7 +310,11 @@ Fillando — повноцінний e-commerce додаток для прода�
 - Категорії в хедері, мобільному меню й футері приходять із `GET /categories`,
   тож нова категорія одразу є в HTML, який отримує краулер.
 - Sitemap містить головну, юридичні сторінки, прайс-лист, категорії,
-  **опубліковані лендінги** і товари.
+  **опубліковані лендінги** і товари (лише `active`; архівний товар має сторінку,
+  але в sitemap не потрапляє).
+- `metadata.verification.google` у кореневому layout читається з
+  `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION`; тег не рендериться, доки значення порожнє.
+- Google Shopping фід, Product JSON-LD і GA4 — §24.
 
 ---
 
@@ -323,32 +329,39 @@ Fillando — повноцінний e-commerce додаток для прода�
 **Відповідь:**
 ```json
 {
-  "variant": { "id", "name", "slug", "sku", "price", "price_updated_at", "stock", "images", "v_value", "status" },
-  "product": { "id", "name", "description", "variant_type", "attributes" },
+  "variant": { "id", "name", "slug", "sku", "price", "price_updated_at", "stock", "images", "v_value", "status", "color", "weight_g" },
+  "product": { "id", "name", "description", "variant_type", "attributes", "manufacturer" },
   "siblings": [ { /* той самий публічний allowlist, лише active */ } ],
   "category_slug": "…",
-  "category_name": "…"
+  "category_name": "…",
+  "spooled_counterpart": { "slug", "name", "price", "matched_colour" } | null
 }
 ```
 
-Публічна проєкція варіанта (`PUBLIC_VARIANT_FIELDS`, `fillando-be/src/modules/product/product-public.mappers.ts`) — фіксований allowlist: `vendor_product_sku`, `prom_id`, `prom_*` ніколи не віддаються. Віддаються лише варіанти зі `status = active`; draft/archived → 404.
+Публічна проєкція варіанта (`PUBLIC_VARIANT_FIELDS`, `fillando-be/src/modules/product/product-public.mappers.ts`) — фіксований allowlist: `vendor_product_sku`, `prom_id`, `prom_*` ніколи не віддаються. `color` — резолвлений запис словника (`name_uk`, `name_en`, `family`, `hex_stops`) або `null`; `weight_g` — вага відправлення в грамах або `null`. `product.manufacturer` — значення атрибута «Виробник» (той самий хелпер, що в прайс-листі) або `null`; **`Vendor` — постачальник і брендом ніколи не віддається.**
+
+Статуси: `active` — звичайна сторінка; `archived` — **200** зі `status: archived`, сторінка в режимі «Знято з продажу» (TD-0006 §5.4); `draft` → 404. `siblings` і `spooled_counterpart` — лише `active`.
 
 **UI-елементи:**
 - Галерея зображень з мініатюрами та навігацією
+- Чип виробника над назвою (з `product.manufacturer`; без атрибута чипа немає)
 - Назва товару з варіантом (якщо є)
-- Бейдж наявності (в наявності / немає / мало залишилось)
+- Бейдж наявності (в наявності / немає / мало залишилось / **знято з продажу**)
 - Ціна в ₴ (UAH)
 - SKU
-- Селектор варіанту (dropdown, якщо є інші варіанти)
+- Перемикач варіанту: swatch-ряд, коли кожен варіант має колір зі словника, інакше dropdown
 - Вибір кількості (+/- кнопки з валідацією по стоку)
-- Кнопка "Додати в кошик" (неактивна якщо немає в наявності)
+- Кнопка "Додати в кошик" (неактивна якщо немає в наявності або товар архівний)
+- **Блок доставки:** «Нова Пошта — орієнтовно ₴N, 1–3 дні» з підписом «розраховано за вагою N кг, відділення–відділення по Україні». Сума — з таблиці ставок `SHIPPING_RATE_TABLE` (`fillando-fe/src/common/utils/shipping.utils.ts`: дві сходинки ≤2 кг / ≤10 кг × дві зони, числа знімає `fillando-be/scripts/shipping-rates.js` з API Нової Пошти за договором магазину). Без `weight_g` суми немає — лише «за тарифом перевізника»
 - Опис товару (rich HTML)
-- Таблиця атрибутів
-- Product schema (JSON-LD) для SEO — `offers` включає `shippingDetails` (Нова Пошта, UA, орієнтовний тариф, 1–3 дні) та `hasMerchantReturnPolicy` (14 днів, зворотна пересилка коштом покупця — умови з `/returns`) для Google Merchant listings
+- Курована таблиця характеристик (фіксований порядок вимірів, значення варіанта з обраної осі)
+- Product schema (JSON-LD) — єдиний автор `buildProductJsonLd` (`products/[slug]/product-jsonld.utils.ts`): `sku`, `brand` (з `manufacturer`, без фолбеку на назву магазину), `inProductGroupWithID` (= id товару, лише при ≥2 siblings), `color` (словник), `material` (атрибут `polymer`), `weight` і `offers.shippingDetails` (з `weight_g`), `offers.url`, `priceValidUntil` (+90 днів), `itemCondition: NewCondition`, `availability` (`InStock` / `OutOfStock` / `Discontinued` для архівного), `hasMerchantReturnPolicy` (14 днів, зворотна пересилка коштом покупця, дефектний товар — `itemDefectReturnFees: FreeReturn`). Кожне поле деградує відсутністю, не заглушкою
 
 **Поведінка:**
 - Якщо товар вже в кошику — кнопка показує "В кошику" з галочкою
 - Валідація кількості по доступному стоку (підказка при перевищенні)
+- **Архівний товар** (`status = archived`): сірий пілл «Знято з продажу», знебарвлене фото, перекреслена ціна, вимкнена кнопка, без перемикача варіантів, блок «Ми його більше не возимо» з посиланням на категорію; `robots: noindex, follow`; у sitemap і фід не потрапляє. Живий беклінк або реклама не ведуть у 404
+- GA4: `view_item` при відкритті/перемиканні варіанта, `add_to_cart` після успішного додавання (§24)
 
 ---
 
@@ -651,8 +664,13 @@ Fillando — повноцінний e-commerce додаток для прода�
 | `price` | number | Ціна |
 | `stock` | number | Кількість на складі (за замовч. 0) |
 | `images` | string[] | URL зображень (завантаження через S3) |
-| `vendor_product_sku` | string | SKU виробника (опц.) |
+| `vendor_product_sku` | string | SKU постачальника (опц., ніколи не публічний) |
+| `prom_id` | string | id товару на Prom (опц., ніколи не публічний) |
+| `color_id` | ObjectId | колір зі словника (опц.; `color_family` проставляє сервер) |
+| `weight_g` | number \| null | **«Вага, г»** — вага відправлення разом із котушкою (опц.). Живить блок доставки, JSON-LD `weight` і `g:shipping_weight` фіда; порожнє поле = `null`, і жоден з них тоді не показує числа. Первинно проставляється міграцією `backfill-variant-weight.js` (атрибут «Вага» + 220 г котушки), далі правиться тут |
 | `status` | enum | `draft` / `active` / `archived` (за замовч. `active`) |
+
+Таблиця варіантів у формі редагування показує вагу колонкою «Вага».
 
 **Автоматичні поля:**
 - `sku`: генерується як `"FL-"` + 6-значний лічильник (напр. `FL-000001`)
@@ -772,6 +790,7 @@ Fillando — повноцінний e-commerce додаток для прода�
 | `image` | string | URL зображення (опц.) |
 | `order` | number | Порядок відображення (мін. 0) |
 | `required_attributes` | array | Атрибути фільтрації каталогу |
+| `google_product_category` | `{ id, path }` \| null | Секція форми **«SEO та Google Merchant»**: вузол таксономії Google для `g:google_product_category` у фіді (TD-0006 §5.2). `id` канонічний, `path` — підказка для адміна. Кнопка «Підставити для філаменту» ставить `499682 — Electronics > Print, Copy, Scan & Fax > 3D Printer Accessories` (окремого вузла «filament» у Google немає). Порожній `id` → `null`, фід тоді пропускає поле й показує попередження |
 
 **Структура `required_attribute`:**
 
@@ -839,6 +858,13 @@ SEO-сторінки із закріпленими фільтрами над к�
 
 `intro_html`, `bottom_html` і відповіді FAQ санітизуються на записі — вітрина
 рендерить їх як HTML.
+
+**Ревалідація вітрини.** Вітрина кешує читання лендінгів і sitemap на годину. Після кожного
+`POST`/`PATCH`/`DELETE` лендінга бекенд викликає `POST {FRONTEND_URL}/api/revalidate`
+(`{ "resource": "landings" }`, заголовок `x-revalidate-secret` зі спільного `REVALIDATE_SECRET`),
+щоб збережений текст був видимий на наступному запиті. Виклик fire-and-forget: невдача — лише
+запис у лог, збереження не падає. Контракт — `fillando-be/src/docs/STOREFRONT_REVALIDATION.md`,
+`fillando-fe/docs/cache-revalidation.md`.
 
 ---
 ---
@@ -1119,6 +1145,7 @@ SEO-сторінки із закріпленими фільтрами над к�
 | `image` | string | default: null |
 | `order` | number | default: 0 |
 | `required_attributes` | embedded array | `{ key, label, filter_type, unit }` |
+| `google_product_category` | embedded `{ id: number, path: string }` \| null | default: null — вузол таксономії Google для Merchant-фіда; per-category за контрактом TD-0005 |
 
 `key` виводиться з `label` сервером (`generateAttrKey`) і ніколи не приходить від
 клієнта. П'ять каталожних вимірів мають фіксовані англійські ключі через
@@ -1168,8 +1195,11 @@ SEO-сторінки із закріпленими фільтрами над к�
 | `price_updated_at` | Date | nullable — коли `price` останній раз підтверджено |
 | `stock_updated_at` | Date | nullable — коли `stock` останній раз підтверджено |
 | `status` | enum | `draft` / `active` / `archived` |
+| `color_id` | ObjectId → Color | nullable — колір зі словника (TD-0002) |
+| `color_family` | enum `ColorFamily` | nullable — денормалізовано з `Color.family`; по ньому працює swatch-фільтр |
+| `weight_g` | number | nullable — вага відправлення в грамах (філамент + котушка); живить доставку, JSON-LD і `g:shipping_weight` (TD-0006) |
 
-**Індекси:** `product_id`, `category_id + status`, `slug` (unique), `sku` (unique)
+**Індекси:** `product_id`, `category_id + status`, `category_id + status + color_family`, `slug` (unique), `sku` (unique)
 
 **Ціна з Prom.** `price` рахується як знижена ціна вендора + фіксована tiered-надбавка. Prom не
 віддає об'єкт `discount` для товарів, яких немає в наявності, і повертає голу pre-discount суму —
@@ -1347,8 +1377,11 @@ SEO-сторінки із закріпленими фільтрами над к�
 | `/admin/products` | Список товарів |
 | `/admin/products/create` | Створення товару |
 | `/admin/products/{id}/edit` | Редагування товару |
-| `/admin/vendors` | Виробники |
-| `/admin/categories` | Категорії |
+| `/admin/vendors` | Постачальники (Vendors) |
+| `/admin/categories` | Категорії (з секцією «SEO та Google Merchant») |
+| `/admin/colors` | Словник кольорів |
+| `/admin/landings` | Лендінги |
+| `/admin/feed` | Статус Google Shopping фіда: KPI, виключення, попередження, «Перегенерувати» |
 | `/admin/coupons` | Знижкові купони |
 | `/admin/orders` | Замовлення |
 | `/admin/orders/{id}` | Деталі замовлення |
@@ -1436,6 +1469,63 @@ B2B-канал для оптових закупок та індивідуаль�
 - **UI:** спільний компонент `common/components/LegalDocument.tsx` (offer/returns/privacy); «Контакти» — власна верстка. Патерн і стилі — як у FAQ.
 - **Видимість:** лінки в футері (на кожній сторінці) + рядок згоди з офертою на чекауті — щоб краулер LiqPay їх знаходив.
 - **⚠️ Перед подачею в LiqPay:** заповнити реальні `РНОКПП`, юр-адресу та email у `COMPANY` (наразі плейсхолдери `уточнюється`).
+
+---
+
+## 24. Google Merchant: фід і structured data
+
+Джерело дизайну — [TD-0006](../designs/TD-0006-google-merchant-feed-and-structured-data.md),
+реалізація — [Plan-0006](../plans/plan-0006-google-merchant.md). Код у `dev` з 2026-09-06;
+у проді — після релізу (Plan-0005, блок A). Кабінети Google (Search Console, Merchant Center,
+GA4, Ads) налаштовує власник після релізу й міграцій.
+
+### 24.1 Google Shopping фід
+
+| | |
+|---|---|
+| **Endpoint** | `GET /feeds/google-shopping.xml` — публічний, реєструється в Merchant Center |
+| **Адмін** | `POST /feeds/google-shopping/regenerate`, `GET /feeds/google-shopping/status` (ADMIN) |
+| **Формат** | RSS 2.0 з `g:`-атрибутами (той самий читають Bing і Meta) |
+| **Оновлення** | генерація при старті процесу та щогодини (`RUN_CRON`); XML в пам'яті |
+| **Холодний старт** | до першої генерації — `503` + `Retry-After: 60`, ніколи не порожній канал |
+
+Позиції — лише `active` варіанти. Поля: `g:id` (SKU), `g:item_group_id` (товар), `title`,
+`description` (текст без розмітки, ≤5000), `link`, `g:image_link` + до 10 `g:additional_image_link`
+(оригінальні URL — ті самі, що в JSON-LD), `g:availability` (`in_stock` / `out_of_stock`),
+`g:price` (UAH), `g:brand` (атрибут «Виробник»), `g:google_product_category` (з категорії),
+`g:product_type` («Категорія > H1 лендінга» для найспецифічнішого опублікованого лендінга, інакше
+назва категорії), `g:condition new`, `g:identifier_exists false`, `g:color` (словник), `g:material`
+(`polymer`), `g:shipping_weight`, `g:custom_label_0..4` (категорія · виробник · глибина залишку ·
+ціновий діапазон · швидкість продажів за 90 днів PAID-замовлень). **Маржі й supplier-полів у
+фіді немає.**
+
+Виключення (позиції немає): без фото, без ціни, без атрибута «Виробник», зникли товар або
+категорія. Попередження (позиція є, лістинг гірший): немає `google_product_category`, опису,
+ваги, обов'язкового атрибута категорії. Підсумок генерації бачить адмін на `/admin/feed`.
+Деталі — `fillando-be/src/docs/MERCHANT_FEED.md`.
+
+### 24.2 Product JSON-LD
+
+Описано в §5. Єдиний автор — `buildProductJsonLd`; жодне поле не підставляється заглушкою.
+Властивість групи варіантів — `inProductGroupWithID` (не `productGroupID`, який на вузлі
+`Product` ігнорується мовчки).
+
+### 24.3 GA4 і Google Ads
+
+Тег Ads рендериться лише після згоди на cookies (`Analytics.tsx`); GA4 їде тим самим тегом
+другим `config`, коли задано `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID`. Події через `common/lib/ga4-events.ts`
+(над чергою `gtag()`): `view_item`, `add_to_cart`, `begin_checkout` (раз за візит чекауту),
+`purchase` (агреговано, на сторінці успіху разом з Ads-конверсією). Усі — no-op без id property.
+**GA4 `purchase` не імпортується в Ads як конверсія** — Ads-піксель лишається єдиним джерелом
+для ставок, інакше кожне замовлення рахується двічі.
+
+### 24.4 Дані
+
+- `ProductVariant.weight_g` — §18.6; бекфіл `scripts/fillando_v_2/backfill-variant-weight.js`
+  (крок 3i релізу): атрибут «Вага» (кг) + 220 г котушки, рефіл без котушки; неспарсене → `null`.
+- `Category.google_product_category` — §18.3; для «Філамент» `499682`.
+- Ставки доставки — `scripts/shipping-rates.json` (`yarn shipping:rates`, API Нової Пошти,
+  Львів → Львів і Львів → Київ, 2 і 10 кг); одне джерело для вітрини й Merchant Center.
 
 ---
 

@@ -315,4 +315,5 @@ namespace `k` по категорії (`category_slug:attr_key`) у бекенд
 2. Кожен майбутній TD категорії (Фаза 4: «Аксесуари» тощо) посилається на
    цей TD у своєму розділі Related і бере §5.3 як перелік місць, які треба
    ключувати по категорії.
-3. Regression-тест ізоляції `findCatalogItems` — Plan-0005 G6 (fillando-be).
+3. ~~Regression-тест ізоляції `findCatalogItems`~~ — код у `dev` 2026-09-06:
+   `product-variant-catalog-isolation.int-spec.ts` (Plan-0005 G6).

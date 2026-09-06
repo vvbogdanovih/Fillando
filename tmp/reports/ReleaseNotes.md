@@ -1,12 +1,12 @@
 ## 06/09
 - Made saved landing copy appear on the storefront at once.
-- Proved the cache purge against a production build.
-- Reviewed TD-0006 and prepared its four decisions.
-- Found the feed would have shipped the wrong brand.
-- Corrected the Google category on the mock.
 - Approved TD-0006 and TD-0005 after review.
-- Wrote Plan-0006 for the Merchant work.
-- Queued production cache revalidation as backend work.
+- Found the feed would have shipped the wrong brand.
+- Wrote Plan-0006 and built its Google Shopping feed.
+- Weighed every variant and pulled Nova Poshta rates.
+- Enriched product markup and wired GA4 events.
+- Built the admin feed screen and new catalogue fields.
+- Finished the product page: brand, delivery, discontinued.
 
 ## 05/09
 - Built the colour dictionary as a table.

@@ -1,12 +1,12 @@
 ## 06/09
 - Made saved landing copy appear on the storefront at once.
-- Approved TD-0006 and TD-0005 after review.
-- Found the feed would have shipped the wrong brand.
+- Approved both designs; caught the wrong-brand feed bug.
 - Wrote Plan-0006 and built its Google Shopping feed.
 - Weighed every variant and pulled Nova Poshta rates.
 - Enriched product markup and wired GA4 events.
 - Built the admin feed screen and new catalogue fields.
 - Finished the product page: brand, delivery, discontinued.
+- Fixed checkout stock errors, hidden rows, colour dialog.
 
 ## 05/09
 - Built the colour dictionary as a table.

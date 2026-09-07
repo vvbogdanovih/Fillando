@@ -73,6 +73,7 @@ Definition of done:
 | 17 | Оновити `required_attributes` категорії «Філамент»: **прибрати `material`**, додати `polymer`/`finish`/`reinforcement`/`series` (вимога TD-0002 §5.2.1, останній абзац). `material` лишається в даних як маркетингова назва | fillando-be | 16 | ☐ прод |
 | 18 | `backfill-spool-included.js` — усім товарам без атрибута → `Так`; **одним батчем** із додаванням `spool_included` у `required_attributes` (рядок у фільтрі без backfill збреше, бо `$elemMatch` не ловить відсутність) | fillando-be | 17 | ☐ прод |
 | 19 | `seed-colors.js` → `normalize-variant-colors.js` на копії → **ручний розбір** `color-report.json` → прод. Зберігати `v_value_legacy` на один реліз, писати `slug-map.json` | fillando-be | 6, 9, **12, 27** | ☐ прод |
+| 19a | Крок 3k `rename-products-short.js` (додано 2026-09-06 за рішенням власника 7, TD-0002 §5.2.4): короткі назви зі `short-names.js`, після 3j у тому ж вікні; slug-и знову змінюються без 301 і дописуються в `slug-map.json`; колізія «Candy» (B5) блокує один товар до розведення | fillando-be | 19, B5 | ☑ код у dev / ☐ прод |
 | 20 | `seed-landings.js` — 14 лендінгів; контентні лишаються `draft`, доки не написано текст | fillando-be | 8, 16, 18 | ☐ прод |
 
 ### PR-3 (fe) — Фаза 0, SEO-гігієна

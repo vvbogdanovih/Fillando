@@ -1,4 +1,13 @@
+## 07/09
+- Applied the known-defect fixes on dev; the rename dry run is collision-free.
+- Told the two Candy variants apart by the owner's call; the rename now covers every product.
+- Wrote the short-name rename migration with a reviewed dictionary; search falls back on the category.
+- Kept the category word in product page titles for short names.
+
 ## 06/09
+- Let buyers change the payment method and pay a stuck LiqPay order; one live card session per order.
+- Designed and reviewed the catalogue facet counts; built them on the backend.
+- Built the facet sidebar: counts, accordion, search, clear all, sticky drawer button.
 - Made saved landing copy appear on the storefront at once.
 - Approved both designs; caught the wrong-brand feed bug.
 - Wrote Plan-0006 and built its Google Shopping feed.

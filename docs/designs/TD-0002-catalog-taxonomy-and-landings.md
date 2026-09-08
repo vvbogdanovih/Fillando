@@ -199,35 +199,35 @@ erDiagram
 
 | # | material | polymer | finish | reinforcement | series |
 |---|---|---|---|---|---|
-| 1 | ABS | ABS | — | — | Standard |
-| 2 | ABS-GF | ABS | — | GF | Standard |
-| 3 | ASA | ASA | — | — | Standard |
-| 4 | PA6 Nylon | PA6 | — | — | Standard |
-| 5 | PA6-CF | PA6 | — | CF | Standard |
-| 6 | PET-CF | PET | — | CF | Standard |
-| 7 | PETG | PETG | — | — | Standard |
+| 1 | ABS | ABS | — | — | Basic |
+| 2 | ABS-GF | ABS | — | GF | Basic |
+| 3 | ASA | ASA | — | — | Basic |
+| 4 | PA6 Nylon | PA6 | — | — | Basic |
+| 5 | PA6-CF | PA6 | — | CF | Basic |
+| 6 | PET-CF | PET | — | CF | Basic |
+| 7 | PETG | PETG | — | — | Basic |
 | 8 | PETG High Speed | PETG | — | — | High Speed |
-| 9 | PETG-CF | PETG | — | CF | Standard |
-| 10 | PLA | PLA | — | — | Standard |
-| 11 | PLA Dual-Silk | PLA | Dual-Silk | — | Standard |
-| 12 | PLA Glow | PLA | Glow | — | Standard |
-| 13 | PLA Gradient | PLA | Gradient | — | Standard |
+| 9 | PETG-CF | PETG | — | CF | Basic |
+| 10 | PLA | PLA | — | — | Basic |
+| 11 | PLA Dual-Silk | PLA | Dual-Silk | — | Basic |
+| 12 | PLA Glow | PLA | Glow | — | Basic |
+| 13 | PLA Gradient | PLA | Gradient | — | Basic |
 | 14 | PLA High Speed | PLA | — | — | High Speed |
 | 15 | PLA Lite | PLA | — | — | Lite |
-| 16 | PLA Luminous | PLA | Luminous | — | Standard |
-| 17 | PLA Matte | PLA | Matte | — | Standard |
-| 18 | PLA Matte Rainbow | PLA | Matte, Rainbow | — | Standard |
-| 19 | PLA Rainbow | PLA | Rainbow | — | Standard |
-| 20 | PLA Silk | PLA | Silk | — | Standard |
-| 21 | PLA Silk Rainbow | PLA | Silk, Rainbow | — | Standard |
+| 16 | PLA Luminous | PLA | Luminous | — | Basic |
+| 17 | PLA Matte | PLA | Matte | — | Basic |
+| 18 | PLA Matte Rainbow | PLA | Matte, Rainbow | — | Basic |
+| 19 | PLA Rainbow | PLA | Rainbow | — | Basic |
+| 20 | PLA Silk | PLA | Silk | — | Basic |
+| 21 | PLA Silk Rainbow | PLA | Silk, Rainbow | — | Basic |
 | 22 | PLA Silk+ | PLA | Silk | — | Plus |
-| 23 | PLA Temperature Changing | PLA | Temperature Changing | — | Standard |
-| 24 | PLA Transparent Rainbow | PLA | Rainbow | — | Standard |
-| 25 | PLA Tri-silk | PLA | Tri-Silk | — | Standard |
+| 23 | PLA Temperature Changing | PLA | Temperature Changing | — | Basic |
+| 24 | PLA Transparent Rainbow | PLA | Rainbow | — | Basic |
+| 25 | PLA Tri-silk | PLA | Tri-Silk | — | Basic |
 | 26 | PLA+ | PLA | — | — | Plus |
-| 27 | PLA-CF | PLA | — | CF | Standard |
-| 28 | TPU | TPU | — | — | Standard |
-| 29 | Wood PLA | PLA | Wood | — | Standard |
+| 27 | PLA-CF | PLA | — | CF | Basic |
+| 28 | TPU | TPU | — | — | Basic |
+| 29 | Wood PLA | PLA | Wood | — | Basic |
 
 Результат: `polymer` — 7 значень, `finish` — 10, `reinforcement` — 2 (+«немає»),
 `series` — 4. Замість одного списку на 29 позицій.
@@ -651,9 +651,13 @@ sequenceDiagram
 Питання попередньої версії (§8) розв'язані власником (vvbogdanovih)
 2026-09-01:
 
-1. **`series` — окремий атрибут.** Підтверджено: `series` (Standard /
+1. **`series` — окремий атрибут.** Підтверджено: `series` (Basic /
    High Speed / Lite / Plus) лишається окремим виміром, не згортається у
-   `finish`.
+   `finish`. **2026-09-07:** базове значення перейменовано зі `Standard` на
+   `Basic` (у фільтрі — «Базова (Basic)»): «Стандарт» читалось як якість, а не
+   як рівень серії поруч із Plus і High Speed; збігається з назвами Bambu Lab
+   (PLA Basic, PETG Basic). Крок 3c перебудовує похідні атрибути з нуля, тож
+   окремої міграції не треба.
 2. **`PLA Lite` (#15).** Найближчим часом матеріал імовірно піде з
    наявності — не інвестувати в окремий SEO-текст чи лендінг під нього;
    `series: Lite` лишається в таксономії лише як похідне поле, без

@@ -1,4 +1,17 @@
+## 08/09
+- Added search over the admin colour and landing tables; the «Показано N з M» counter is truthful now.
+- Closed the last artboard gaps: colour dialog subtitle and stop-order rule, Google Feed as a top-level menu item, honest wording for a cancelled order.
+- Re-audited all 152 appendix rows against dev: 119 closed in code, 31 of them with data on dev, 5 left and none of them code.
+
 ## 07/09
+- Named the last unnamed Dual-Silk colour (HC187, Yellow-Green) with the owner.
+- Checked every colour name against the Kingroon and Sunlu invoices; 17 supplier names added, 25 dev variants re-pointed.
+- Gave colour families bilingual labels and taught the search the suppliers' spellings.
+- Renamed the plain series from Standard to Basic at the owner's word; re-derived it on dev.
+- Added a searchable colour multi-select above the swatch chips, at the owner's request.
+- Ran the full catalogue migration chain on dev at the owner's word; verify passed clean.
+- Checked the storefront on the migrated data: short names, swatches, both Candy colours, the refill page.
+- Found the sitemap keeps old slugs after a rename until revalidated; wrote it into the release steps.
 - Applied the known-defect fixes on dev; the rename dry run is collision-free.
 - Told the two Candy variants apart by the owner's call; the rename now covers every product.
 - Wrote the short-name rename migration with a reviewed dictionary; search falls back on the category.

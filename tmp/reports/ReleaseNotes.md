@@ -6,6 +6,10 @@
 - Purged the storefront cache for products and categories.
 - Rate-limited the wholesale form and fixed IP counting.
 - Added three hundred backend and a hundred frontend tests.
+- Closed the last four named test gaps.
+- Pinned the guards of six untested controllers.
+- Fixed an empty product meta description.
+- Fixed a schema that blocked its own module.
 
 ## 08/09
 - Added search over the admin colour and landing tables; the «Показано N з M» counter is truthful now.

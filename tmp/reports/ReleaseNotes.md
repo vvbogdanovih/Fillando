@@ -1,7 +1,21 @@
+## 09/09
+- Closed every code item the audit found, in four waves.
+- Made a transparent colour readable next to white.
+- Stopped an empty feed from delisting the shop.
+- Rewired renaming a colour to reach stored names.
+- Purged the storefront cache for products and categories.
+- Rate-limited the wholesale form and fixed IP counting.
+- Added three hundred backend and a hundred frontend tests.
+
 ## 08/09
 - Added search over the admin colour and landing tables; the «Показано N з M» counter is truthful now.
 - Closed the last artboard gaps: colour dialog subtitle and stop-order rule, Google Feed as a top-level menu item, honest wording for a cancelled order.
 - Re-audited all 152 appendix rows against dev: 119 closed in code, 31 of them with data on dev, 5 left and none of them code.
+- Audited the code against all fourteen artboards, independently.
+- Found twenty-one defects and seventeen wording mismatches, no large gaps.
+- Measured the backend lint debt and the absent frontend linter.
+- Verified every test, the typecheck and the production build.
+- Logged the findings as tracker block I for the owner.
 
 ## 07/09
 - Named the last unnamed Dual-Silk colour (HC187, Yellow-Green) with the owner.

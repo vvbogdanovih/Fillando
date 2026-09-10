@@ -1,3 +1,9 @@
+## 10/09
+- Audited catalogue plans and release readiness.
+- Fixed migration failures, recovery and rollback records.
+- Verified migrations against an isolated database backup.
+- Documented the local production migration procedure.
+
 ## 09/09
 - Closed every code item the audit found, in four waves.
 - Made a transparent colour readable next to white.
